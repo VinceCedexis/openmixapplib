@@ -4,13 +4,20 @@ var handler = new OpenmixApplication({
             cname: 'www.foo.com'
         },
         'bar': {
-            cname: 'www.bar.com'
+            cname: 'www.bar.com',
+            except_country: ['CN']
+
         },
         'baz': {
-            cname: 'www.baz.com'
+            cname: 'www.baz.com',
+            except_country: ['CN']
+        },
+        'qux': {
+            cname: 'www.qux.com',
+            padding: 0,
         }
     },
-    default_provider: 'foo',
+    default_provider: 'fastly_ssl',
     default_ttl: 20,
     availability_threshold: 80,
     // To enforce a Sonar health-check, set this threshold value to 1. To ignore the health-check, set this value to 0.
@@ -57,12 +64,29 @@ function OpenmixApplication(settings) {
             candidates = dataRtt,
             candidateAliases;
         
+        // allReasons = {
+        //     best_performing_provider: 'A',
+        //     no_available_servers: 'B',
+        //     geo_override_on_country: 'C',
+        //     only_one_provider_avail: 'D',
+        //     data_problem: 'E'
+        // };
+        
         allReasons = {
             best_performing_provider: 'A',
             all_providers_eliminated: 'B',
             data_problem: 'C'
         };
-        
+
+        /* jslint laxbreak:true */
+        function filterCandidatesOnGeo(candidate, alias) {
+            var provider = settings.providers[alias];
+            // Considered only available providers in the provider countries/markets/asn
+            return (provider !== undefined
+                && (provider.except_country === undefined || provider.except_country.indexOf(request.country) === -1)
+                && (provider.countries === undefined || provider.countries.indexOf(request.country) !== -1))
+        }
+
         /**
         * @param candidate
         * @param key
@@ -87,6 +111,8 @@ function OpenmixApplication(settings) {
             
             // Remove any that don't meet the Fusion Sonar threshold and Radar sonar threshold
             candidates = filterObject(candidates, filterAvailability);
+            //then filter based on geography
+            candidates = filterObject(candidates, filterCandidatesOnGeo);
             candidateAliases = Object.keys(candidates);
             
             // If there is one or more available choose the best
